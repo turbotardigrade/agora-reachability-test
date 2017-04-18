@@ -27,29 +27,32 @@ def reset_remote_node(IP):
         p.wait()
 
     for line in iter(p.stdout.readline, b''):
-        if 'peer identity: ' in line:
-            peer = line[15:-1]
+        if 'I am peer: ' in line:
+            peer = line.split(' ')[5]
 
         # on receiving this we know the peer is online
         if 'Seed for' in line:
             return peer, close
 
+def ping(peer):
+    pm = Popen(['ipfs', 'ping', peer], stdout=PIPE, stderr=STDOUT, env=ENV)
+    for line in iter(pm.stdout.readline, b''):
+        if 'Pong received' in line:
+            hasPong = True
+            elapsed = time.time()-start
+            pingtime = line.split(' ')[-2][5:]
+            return hasPong, elapsed, pingtime
+    return False, None, None
+
 for _ in xrange(N):
     peer, close = reset_remote_node(IP)
     start, hasPong = time.time(), False
-    while not hasPong:
-        pm = Popen(['ipfs', 'ping', peer], stdout=PIPE, stderr=STDOUT, env=ENV)
-        for line in iter(pm.stdout.readline, b''):
-            if 'Pong received' in line:
-                hasPong = True
-                elapsed = time.time()-start
-                ping = line.split(' ')[-2][5:]
-                break
-            pm.wait()
-
-        # print 'No Pong. Restart...'
+    while True:
+        hasPong, elapsed, pingtime = ping(peer)
+        if hasPong:
+            break
     close()
 
-    print elapsed, ping
+    print elapsed, pingtime
     with open("times.csv", "a") as f:
-        f.write("%s, %f, %s\n" % (datetime.now().time(), elapsed, ping))
+        f.write("%s, %f, %s\n" % (datetime.now().time(), elapsed, pingtime))
